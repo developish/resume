@@ -1,0 +1,90 @@
+---
+- hosts: all
+  become: yes
+
+  tasks:
+    - apt: update_cache=yes
+
+    - apt: name=unzip state=present
+    - apt: name=xvfb state=present
+
+    - name: install wkhtmltopdf
+      apt: name={{item}} state=present
+      with_items:
+        - xorg
+        - wkhtmltopdf
+
+    - name: install wkhtmltopdf-wrapper
+      copy:
+        src: wkhtmltopdf-wrapper
+        dest: /usr/local/bin/
+        mode: 0755
+
+    - name: fonts directories
+      file:
+        path: /home/{{ansible_user}}/{{item}}
+        state: directory
+        owner: ubuntu
+        group: ubuntu
+      with_items:
+        - .fonts/
+        - .fonts/opensans
+        - .fonts/roboto
+
+    - name: unzip fonts
+      unarchive: src={{item.src}} dest=/home/{{ansible_user}}/.fonts/{{item.dirname}} owner={{ansible_user}}
+      with_items:
+        - { src: 'fonts/Open_Sans.zip', dirname: 'opensans' }
+        - { src: 'fonts/Roboto.zip', dirname: 'roboto' }
+
+    - name: reload fonts
+      become_user: ubuntu
+      shell: fc-cache
+
+    - name: install ruby dependencies
+      apt: name={{item}} state=present
+      with_items:
+        - xorg
+        - build-essential
+        - autoconf
+        - bison
+        - build-essential
+        - libssl-dev
+        - libyaml-dev
+        - libreadline6-dev
+        - zlib1g-dev
+        - libncurses5-dev
+        - libffi-dev
+        - libgdbm3
+        - libgdbm-dev
+
+    - name: download ruby source
+      become_user: ubuntu
+      unarchive:
+        src: http://ftp.ruby-lang.org/pub/ruby/2.4/ruby-2.4.0.tar.gz
+        dest: /home/ubuntu
+        remote_src: true
+        creates: /usr/local/bin/ruby
+
+    - name: install ruby
+      shell: ./configure && make && make install
+      args:
+        chdir: /home/ubuntu/ruby-2.4.0
+        creates: /usr/local/bin/ruby
+
+    - name: install bundler
+      shell: gem install bundler
+      args:
+        creates: /usr/local/bin/bundle
+
+    - name: install project gems
+      shell: bundle install
+      args:
+        chdir: /vagrant
+
+    - name: generate the file
+      become_user: ubuntu
+      shell: ruby generate.rb
+      args:
+        chdir: /vagrant
+        executable: /bin/bash
